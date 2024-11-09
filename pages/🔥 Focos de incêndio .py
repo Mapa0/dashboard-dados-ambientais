@@ -4,6 +4,7 @@ import requests
 import pandas as pd
 from datetime import datetime, timedelta
 from io import StringIO
+import altair as alt
 
 def get_data_from_inpe(date):
     date = date.strftime('%Y%m%d')
@@ -107,3 +108,36 @@ with col2:
     st.metric(label=f"Bioma com maior {option.lower()}", value=bioma_maior_metrica, delta=str(metrica_bioma), delta_color="off")
 
 st.table(focos_por_bioma.to_dict(orient='records'))
+
+df_agrupado = df.groupby('municipio_siglaUF').agg(
+    quantidade_focos=('municipio_siglaUF', 'size'),
+    metrica=(options_map[option], 'sum')
+).reset_index()
+
+# Selecionar os 5 maiores municípios por quantidade de focos
+top_5_focos = df_agrupado.nlargest(5, 'quantidade_focos')
+
+# Selecionar os 5 maiores municípios por intensidade FRP
+top_5_metrica = df_agrupado.nlargest(5, 'metrica')
+
+# Gráfico de barras para os 5 maiores municípios por quantidade de focos
+chart_focos = alt.Chart(top_5_focos).mark_bar().encode(
+    x=alt.X('municipio_siglaUF', sort='-y', title='Município-UF'),
+    y=alt.Y('quantidade_focos', title='Quantidade de Focos'),
+    color='municipio_siglaUF'
+).properties(
+    title='Top 5 Municípios por Quantidade de Focos'
+)
+
+# Gráfico de barras para os 5 maiores municípios por intensidade FRP
+chart_metrica = alt.Chart(top_5_metrica).mark_bar().encode(
+    x=alt.X('municipio_siglaUF', sort='-y', title='Município-UF'),
+    y=alt.Y('metrica', title=f'{options_map[option]}'),
+    color='municipio_siglaUF'
+).properties(
+    title=f'Top 5 Municípios por {option}'
+)
+
+# Exibir os gráficos no Streamlit
+st.altair_chart(chart_focos, use_container_width=True)
+st.altair_chart(chart_metrica, use_container_width=True)
