@@ -46,6 +46,15 @@ option = st.selectbox(
     ("Intensidade do incêndio", "Quantidade de dias sem chuva", "Risco de fogo"),
 )
 
+biome_options = st.multiselect(
+    "Quais biomas você deseja analisar?",
+    ["Amazônia", "Caatinga", "Cerrado", "Mata Atlântica", "Pantanal"],
+    ["Pantanal"]
+)
+
+if biome_options == []:
+    biome_options = ["Amazônia", "Caatinga", "Cerrado", "Mata Atlântica", "Pantanal"]
+
 radius = st.slider("Defina um raio de agregação:", 5, 50, 10)
 
 
@@ -56,6 +65,7 @@ options_map = {
 }
 
 df = get_data_from_inpe(date)
+df = df[df['bioma'].isin(biome_options)]
 df = df.dropna(subset=[options_map[option]])
 
 estado_siglas = {
