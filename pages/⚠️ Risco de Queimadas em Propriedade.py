@@ -8,7 +8,8 @@ from io import StringIO
 import altair as alt
 import json
 import re
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point, Polygon, LineString, shape
+
 from fastkml import kml, Placemark
 
 def get_data_from_inpe(date):
@@ -115,7 +116,6 @@ def handle_kml_input():
     if not uploaded:
         st.stop()
 
-    # 1. Lê bytes e parseia com fastkml
     content = uploaded.read().decode("utf-8")
     content = re.sub(r'^\s*<\?xml[^>]+\?>\s*', "", content)
     content = re.sub(
@@ -126,7 +126,6 @@ def handle_kml_input():
     )
     k = kml.KML.from_string(content)
 
-    # 2. Extrai recursivamente todos os Placemark
     root_feats = list(k.features)
     placemarks = extract_placemarks(root_feats)
 
@@ -134,27 +133,39 @@ def handle_kml_input():
         st.error("Nenhuma trilha/polígono encontrada neste KML.")
         st.stop()
 
-    # 3. Permite ao usuário escolher
-    nomes = [pm.name or f"<sem nome {i}>" for i, pm in enumerate(placemarks)]
-    escolha = st.selectbox("Selecione a trilha/polígono", nomes)
-    pm = placemarks[nomes.index(escolha)]
+    valid_items = []
+    for pm in placemarks:
 
-    # 4. Constrói o Polygon Shapely
-    geom = pm.geometry
-    if geom.geom_type == "LineString":
-        poly = Polygon(geom.coords)
-    else:
-        poly = geom  # já é Polygon
+        geom = pm.geometry
+        raw = list(geom.coords)
 
-    coords = list(poly.exterior.coords)
+        if len(raw) <= 1:
+            continue
 
-    # 5. Gera lista de (lat, lon) para o Folium
-    folium_coords = [
-        (lat, lon) for lon, lat, *_ in coords
-    ]
+        shp = shape(pm.geometry)  # converte para shapely
 
-    st.success(f"✅ Polígono `{escolha}` carregado e normalizado do KML")
-    return poly, folium_coords
+        if shp.geom_type == "LineString" and shp.is_ring:
+            shp = shape(pm.geometry)
+            coords = list(shp.coords)
+            poly = Polygon([(lon, lat) for lon, lat, *_ in coords])
+            folium_coords = [(lat, lon) for lon, lat, *_ in coords]
+            valid_items.append((pm,poly,folium_coords))
+
+    if not valid_items:
+        st.error("Nenhum polígono (anel fechado) encontrado neste KML.")
+        st.stop()
+
+    valid_items.sort(key=lambda tpl: tpl[1].area, reverse=True)
+    ring_pms, ring_polys, folium_coords = zip(*valid_items)
+    ring_names = [pm.name or "<sem nome>" for pm in ring_pms]
+
+    escolha = st.selectbox("Selecione um polígono válido", ring_names, index=0)
+    idx = ring_names.index(escolha)
+    poly = ring_polys[idx]
+    folium_coord = folium_coords[idx]
+
+    st.success(f"✅ Polígono `{escolha}` selecionado!")
+    return poly, folium_coord
 
 def parameter_input():
     date = st.date_input("Selecione uma data", value=pd.to_datetime(datetime.now().date()) - timedelta(days=1))
