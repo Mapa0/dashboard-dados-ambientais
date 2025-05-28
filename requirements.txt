@@ -6,3 +6,4 @@ owslib
 streamlit
 altair
 pandas
+fastkml
