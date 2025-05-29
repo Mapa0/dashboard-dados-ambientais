@@ -9,8 +9,51 @@ import altair as alt
 import json
 import re
 from shapely.geometry import Point, Polygon, LineString, shape
+import random
+
 
 from fastkml import kml, Placemark
+
+def generate_fake_df(poly, n=10):
+    """
+    Gera um DataFrame com n pontos aleatórios dentro de `poly`,
+    no formato exigido.
+    """
+    minx, miny, maxx, maxy = poly.bounds  # lon_min, lat_min, lon_max, lat_max
+    records = []
+    for i in range(n):
+        # sortea até cair dentro do polígono
+        while True:
+            lon = random.uniform(minx, maxx)
+            lat = random.uniform(miny, maxy)
+            if poly.contains(Point(lon, lat)):
+                break
+
+        registro = {
+            'id': i + 1,
+            'lat': lat,
+            'lon': lon,
+            'data_hora_gmt': (datetime.utcnow() - timedelta(days=random.randint(0,5))
+                              ).strftime('%Y-%m-%d %H:%M:%S'),
+            'satelite': random.choice(['Aqua', 'Terra']),
+            'municipio': 'MunicípioFake',
+            'estado': 'EstadoFake',
+            'pais': 'Brasil',
+            'municipio_id': random.randint(1000, 9999),
+            'estado_id': random.randint(10, 99),
+            'pais_id': 105,
+            'numero_dias_sem_chuva': random.randint(0, 30),
+            'precipitacao': round(random.uniform(0, 100), 2),
+            'risco_fogo': random.choice([0, 1, 2, 3]),
+            'bioma': random.choice(['Cerrado', 'Pantanal']),
+            'frp': round(random.uniform(0, 500), 2),
+            'estado_sigla': 'EF',
+            'municipio_siglaUF': 'MunicípioFake-EF',
+        }
+        records.append(registro)
+
+    return pd.DataFrame.from_records(records)
+
 
 def get_data_from_inpe(date):
     date = date.strftime('%Y%m%d')
@@ -168,6 +211,7 @@ def handle_kml_input():
     return poly, folium_coord
 
 def parameter_input():
+    st.subheader("🔧 Definição")
     date = st.date_input("Selecione uma data", value=pd.to_datetime(datetime.now().date()) - timedelta(days=1))
 
     # 1) Fonte
@@ -214,7 +258,7 @@ def page_layout_base():
     logo = "https://www.ufms.br/wp-content/uploads/2015/11/ufms_logo_assinatura_vertical_positiva.png"
     st.sidebar.image(logo)
 
-    st.title("⚠️ Risco de Queimadas em Propriedade")
+    st.title("⚠️ Queimadas em Propriedade Rural")
 
 def metrics(df,poly):
     df = process_df_on_polygon(poly, df)
@@ -223,9 +267,13 @@ def metrics(df,poly):
     st.metric(label="Número de focos detectados", value=count)
 
 def main_content():
-    date,poly,folium_coords = parameter_input()
-    df = create_dataframe(date)
-    generate_map_with_polygon_and_hotspots(folium_coords, df)
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        date,poly,folium_coords = parameter_input()
+        df = create_dataframe(date)
+        #df = generate_fake_df(poly,100)
+    with col2:
+        generate_map_with_polygon_and_hotspots(folium_coords, df)
     metrics(df,poly)
 
 page_layout_base()
